@@ -15,9 +15,9 @@
 # limitations under the License.
 #
 
-BOARD_VENDOR := xiaomi
+BOARD_VENDOR := gree
 
-VENDOR_PATH := device/xiaomi/msm8996-common
+VENDOR_PATH := device/gree/msm8996-common
 
 # Architecture
 TARGET_ARCH := arm64
@@ -51,7 +51,7 @@ BOARD_RAMDISK_OFFSET := 0x01000000
 BOARD_RAMDISK_USE_XZ := true
 TARGET_KERNEL_ARCH := arm64
 TARGET_KERNEL_CLANG_COMPILE := true
-TARGET_KERNEL_SOURCE := kernel/xiaomi/msm8996
+TARGET_KERNEL_SOURCE := kernel/gree/msm8996
 
 # Platform
 TARGET_BOARD_PLATFORM := msm8996
@@ -198,4 +198,4 @@ WIFI_HIDL_UNIFIED_SUPPLICANT_SERVICE_RC_ENTRY := true
 WPA_SUPPLICANT_VERSION := VER_0_8_X
 
 # Inherit from the proprietary version
--include vendor/xiaomi/msm8996-common/BoardConfigVendor.mk
+-include vendor/gree/msm8996-common/BoardConfigVendor.mk
