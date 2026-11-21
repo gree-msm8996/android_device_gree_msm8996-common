@@ -39,6 +39,16 @@ TARGET_SCREEN_HEIGHT := 1920
 TARGET_SCREEN_WIDTH := 1080
 
 # Permissions
+# G0245D: NFCC is not populated on this SKU -- I2C-8 0x28 never ACKs even
+# with VEN/FIRM/pinctrl/ref-clock verified correct, and stock CM13 reports
+# "this device does not have NFC support". Do not declare the NFC feature:
+# without it com.android.nfc does not start, matching stock behaviour and
+# avoiding the libnfc-nci nfc_free_conn_cb conn_id abort crash-loop.
+# NOTE: keep this comment OUTSIDE the PRODUCT_COPY_FILES list. A commented
+# line inside a backslash-continued variable breaks the assignment; and a
+# comment with a trailing backslash swallows all following feature entries
+# (wifi/sensor/telephony/etc), which makes WifiManager null and crashes
+# system_server in LOS ProfileManagerService on boot phase 550.
 PRODUCT_COPY_FILES += \
     external/ant-wireless/antradio-library/com.dsi.ant.antradio_library.xml:$(TARGET_COPY_OUT_VENDOR)/etc/permissions/com.dsi.ant.antradio_library.xml \
     frameworks/native/data/etc/android.hardware.audio.low_latency.xml:$(TARGET_COPY_OUT_VENDOR)/etc/permissions/android.hardware.audio.low_latency.xml \
@@ -50,8 +60,6 @@ PRODUCT_COPY_FILES += \
     frameworks/native/data/etc/android.hardware.camera.raw.xml:$(TARGET_COPY_OUT_VENDOR)/etc/permissions/android.hardware.camera.raw.xml \
     frameworks/native/data/etc/android.hardware.fingerprint.xml:$(TARGET_COPY_OUT_VENDOR)/etc/permissions/android.hardware.fingerprint.xml \
     frameworks/native/data/etc/android.hardware.location.gps.xml:$(TARGET_COPY_OUT_VENDOR)/etc/permissions/android.hardware.location.gps.xml \
-    frameworks/native/data/etc/android.hardware.nfc.hce.xml:$(TARGET_COPY_OUT_VENDOR)/etc/permissions/android.hardware.nfc.hce.xml \
-    frameworks/native/data/etc/android.hardware.nfc.xml:$(TARGET_COPY_OUT_VENDOR)/etc/permissions/android.hardware.nfc.xml \
     frameworks/native/data/etc/android.hardware.opengles.aep.xml:$(TARGET_COPY_OUT_VENDOR)/etc/permissions/android.hardware.opengles.aep.xml \
     frameworks/native/data/etc/android.hardware.sensor.accelerometer.xml:$(TARGET_COPY_OUT_VENDOR)/etc/permissions/android.hardware.sensor.accelerometer.xml \
     frameworks/native/data/etc/android.hardware.sensor.barometer.xml:$(TARGET_COPY_OUT_VENDOR)/etc/permissions/android.hardware.sensor.barometer.xml \
@@ -76,9 +84,7 @@ PRODUCT_COPY_FILES += \
     frameworks/native/data/etc/android.hardware.wifi.passpoint.xml:$(TARGET_COPY_OUT_VENDOR)/etc/permissions/android.hardware.wifi.passpoint.xml \
     frameworks/native/data/etc/android.software.midi.xml:$(TARGET_COPY_OUT_VENDOR)/etc/permissions/android.software.midi.xml \
     frameworks/native/data/etc/android.software.print.xml:$(TARGET_COPY_OUT_VENDOR)/etc/permissions/android.software.print.xml \
-    frameworks/native/data/etc/android.software.sip.voip.xml:$(TARGET_COPY_OUT_VENDOR)/etc/permissions/android.software.sip.voip.xml \
-    frameworks/native/data/etc/com.android.nfc_extras.xml:$(TARGET_COPY_OUT_VENDOR)/etc/permissions/com.android.nfc_extras.xml \
-    frameworks/native/data/etc/com.nxp.mifare.xml:$(TARGET_COPY_OUT_VENDOR)/etc/permissions/com.nxp.mifare.xml
+    frameworks/native/data/etc/android.software.sip.voip.xml:$(TARGET_COPY_OUT_VENDOR)/etc/permissions/android.software.sip.voip.xml
 
 # Vendor properties
 -include $(LOCAL_PATH)/vendor_prop.mk
@@ -132,11 +138,23 @@ PRODUCT_COPY_FILES += \
     frameworks/av/services/audiopolicy/config/usb_audio_policy_configuration.xml:$(TARGET_COPY_OUT_VENDOR)/etc/usb_audio_policy_configuration.xml
 
 # Camera
+# The Android 6 stock Gree HAL (camera.msm8996.so) and the stock
+# libmmcamera_interface / libmmjpeg_interface blobs are installed from
+# vendor/gree (msm8996-common-vendor.mk); they are ABI-consistent with the
+# stock mm-qcamera-daemon. Only the Android 11 framework boundary is shimmed
+# (libgu2 / libshim_camera / libshim_metadata / libshim_mutex). The LineageOS
+# QCamera2 HAL is deliberately NOT built for this device.
+# libqomx_core is still source-built (camera/mm-image-codec): the stock
+# libmmjpeg_interface.so DT_NEEDEDs it and no stock blob exists for it.
 PRODUCT_PACKAGES += \
     android.hardware.camera.provider@2.4-impl:32 \
     android.hardware.camera.provider@2.4-service \
-    camera.msm8996 \
-    libmm-qcamera
+    libgu2 \
+    libshim_camera \
+    libqomx_core
+
+PRODUCT_COPY_FILES += \
+    device/gree/msm8996-common/camera_shims/gree-camera.rc:$(TARGET_COPY_OUT_VENDOR)/etc/init/gree-camera.rc
 
 # CNE
 PRODUCT_PACKAGES += \
@@ -200,8 +218,18 @@ PRODUCT_PACKAGES += \
     android.hardware.gatekeeper@1.0-service
 
 # GPS
+# Source-built QTI HIDL GNSS stack (gps/: libloc_core, libgps.utils,
+# liblocation_api, libgnss + android.hardware.gnss@1.0-service-qti; the
+# BUILD_GNSS_HIDL_SERVICE guard in gps/android/Android.mk is forced true).
+# The stock blob vendor.qti.gnss@1.0-service cannot run on Android 11: its
+# passthrough impl needs liblocationservice_glue.so which DT_NEEDEDs
+# libhidltransport (removed in R). The old Android 6 gps.default.so +
+# libloc_eng blobs are ABI-incompatible with this new-API loc stack
+# (libloc_eng needs loc_core::LocAdapterBase::reportNmea which the new
+# libloc_core no longer exports).
 PRODUCT_PACKAGES += \
     android.hardware.gnss@1.0-impl-qti \
+    android.hardware.gnss@1.0-service-qti \
     libcurl \
     libgnss \
     libgnsspps \
@@ -262,11 +290,14 @@ PRODUCT_PACKAGES += \
 
 # Lights
 PRODUCT_PACKAGES += \
-    android.hardware.light@2.0-service.xiaomi_8996
+    android.hardware.light@2.0-service \
+    android.hardware.light@2.0-impl \
+    lights.gree
 
-# LiveDisplay
-PRODUCT_PACKAGES += \
-    vendor.lineage.livedisplay@2.0-service-sdm
+# Pick the GREE lights HAL (hw_get_module checks ro.hardware.lights first;
+# the CAF display tree also ships a lights.msm8996 module we must not hit).
+PRODUCT_PROPERTY_OVERRIDES += \
+    ro.hardware.lights=gree
 
 # Media
 PRODUCT_COPY_FILES += \
@@ -284,14 +315,6 @@ PRODUCT_PACKAGES += \
     android.system.net.netd@1.0 \
     libandroid_net \
     netutils-wrapper-1.0
-
-# NFC
-PRODUCT_PACKAGES += \
-    android.hardware.nfc@1.1-service \
-    com.android.nfc_extras \
-    NfcNci \
-    SecureElement \
-    Tag
 
 # OMX
 PRODUCT_PACKAGES += \
@@ -330,7 +353,7 @@ PRODUCT_COPY_FILES += \
 
 # Recovery
 PRODUCT_PACKAGES += \
-    librecovery_updater_xiaomi
+    librecovery_updater_gree
 
 # RenderScript
 PRODUCT_PACKAGES += \
@@ -347,9 +370,7 @@ PRODUCT_COPY_FILES += \
     $(LOCAL_PATH)/seccomp/mediacodec-seccomp.policy:$(TARGET_COPY_OUT_VENDOR)/etc/seccomp_policy/mediacodec.policy
 
 # Sensors
-PRODUCT_PACKAGES += \
-    android.hardware.sensors@1.0-impl:64 \
-    android.hardware.sensors@1.0-service
+$(call inherit-product, $(LOCAL_PATH)/sensors/sensors.mk)
 
 # Shims
 PRODUCT_PACKAGES += \

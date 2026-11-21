@@ -1,0 +1,14 @@
+# Parsed after android.hardware.camera.provider@2.4-service.rc so this
+# override is the one init keeps. The Android 6 DisplayEventReceiver / Parcel
+# shims live in libgu2, which the stock HAL links in place of libgui; the
+# libshim_camera preload is a harmless placeholder kept for parity.
+service vendor.camera-provider-2-4 /vendor/bin/hw/android.hardware.camera.provider@2.4-service
+    override
+    interface android.hardware.camera.provider@2.4::ICameraProvider legacy/0
+    class hal
+    user cameraserver
+    group audio camera input drmrpc
+    ioprio rt 4
+    capabilities SYS_NICE
+    task_profiles CameraServiceCapacity MaxPerformance
+    setenv LD_PRELOAD libshim_camera.so

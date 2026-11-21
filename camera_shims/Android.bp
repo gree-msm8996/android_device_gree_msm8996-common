@@ -1,0 +1,25 @@
+// Shims for the Android 6 stock Gree camera.msm8996.so on Android 11.
+// libgu2 replaces libgui.so in the HAL's DT_NEEDED: it synthesises a vsync
+// source (the vendor provider cannot reach SurfaceFlinger on vndbinder) and
+// stubs the Android 6 Parcel / IQService layout differences. libshim_camera
+// is an empty LD_PRELOAD placeholder kept for the provider service override.
+// libshim_metadata and libshim_mutex ship as prebuilt blobs in vendor/gree.
+cc_library_shared {
+    name: "libgu2",
+    vendor: true,
+    compile_multilib: "32",
+    srcs: ["libgu2.cpp"],
+    cflags: ["-fvisibility=default"],
+    shared_libs: [
+        "libdl",
+        "libgui",
+    ],
+}
+
+cc_library_shared {
+    name: "libshim_camera",
+    vendor: true,
+    compile_multilib: "32",
+    srcs: ["libshim_camera.c"],
+    shared_libs: ["libgui"],
+}
