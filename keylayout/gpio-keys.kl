@@ -30,3 +30,8 @@ key 114   VOLUME_DOWN
 key 102   HOME
 key 528   FOCUS
 key 766   CAMERA
+# Stock G0245D/G0215D Gree key (PM8994 GPIO 4) uses the private GREE_KEY
+# label, which stock's patched framework understands. AOSP KeyLayoutMap
+# rejects unknown labels, so map scan code 59 to a standard keycode; F1
+# keeps it available to remapper apps without breaking the file parse.
+key 59    F1

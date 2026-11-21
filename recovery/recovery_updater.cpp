@@ -195,6 +195,6 @@ Value* VerifyModemFn(const char* name, State* state,
     return StringValue(strdup(ret ? "1" : "0"));
 }
 
-void Register_librecovery_updater_xiaomi() {
+void Register_librecovery_updater_gree() {
     RegisterFunction("xiaomi.verify_modem", VerifyModemFn);
 }

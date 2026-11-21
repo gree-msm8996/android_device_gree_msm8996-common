@@ -47,14 +47,11 @@ LOCAL_SHARED_LIBRARIES += \
 LOCAL_CFLAGS += $(GNSS_CFLAGS)
 include $(BUILD_SHARED_LIBRARY)
 
+# GREE/G0245D: always build the source HIDL GNSS service. The default guard
+# (only build for PDK/low-RAM feature sets) left msm8996 without any GNSS HAL
+# service, and the stock blob vendor.qti.gnss@1.0-service cannot run on
+# Android 11 (libhidltransport removed).
 BUILD_GNSS_HIDL_SERVICE := true
-ifneq ($(BOARD_VENDOR_QCOM_LOC_PDK_FEATURE_SET), true)
-ifneq ($(LW_FEATURE_SET),true)
-ifneq ($(TARGET_HAS_LOW_RAM),true)
-BUILD_GNSS_HIDL_SERVICE := false
-endif # TARGET_HAS_LOW_RAM
-endif # LW_FEATURE_SET
-endif # BOARD_VENDOR_QCOM_LOC_PDK_FEATURE_SET
 
 ifeq ($(BUILD_GNSS_HIDL_SERVICE), true)
 include $(CLEAR_VARS)

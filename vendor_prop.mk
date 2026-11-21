@@ -108,6 +108,12 @@ PRODUCT_PROPERTY_OVERRIDES += \
     vendor.display.perf_hint_window=50 \
     vendor.gralloc.enable_fb_ubwc=1
 
+# Camera: the stock Android6 HAL defaults preview/video to UBWC output, but
+# gralloc1 hands the framework linear NV12 -> garbled green viewfinder.
+PRODUCT_PROPERTY_OVERRIDES += \
+    persist.camera.preview.ubwc=0 \
+    persist.camera.video.ubwc=0
+
 # IMS
 PRODUCT_PROPERTY_OVERRIDES += \
     persist.dbg.volte_avail_ovr=1 \
@@ -122,11 +128,6 @@ PRODUCT_PROPERTY_OVERRIDES += \
 # Memory optimizations
 PRODUCT_PROPERTY_OVERRIDES += \
     ro.vendor.qti.sys.fw.bservice_enable=true
-
-# NFC
-PRODUCT_PROPERTY_OVERRIDES += \
-    ro.nfc.port=I2C \
-    persist.nfc.smartcard.config=SIM1,SIM2,eSE1
 
 # Perf
 PRODUCT_PROPERTY_OVERRIDES += \

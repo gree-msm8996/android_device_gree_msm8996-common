@@ -28,6 +28,10 @@ vendor/lib/rfsa/adsp/libfastcvadsp_skel.so
 vendor/lib/rfsa/adsp/libvpp_svc_skel.so
 vendor/lib/rfsa/adsp/libvpp_frc.so
 vendor/lib/rfsa/adsp/us-syncproximity.so
+vendor/lib/rfsa/adsp/libobjectMattingApp_skel.so
+vendor/lib/rfsa/adsp/libscveCleverCapture_skel.so
+vendor/lib/rfsa/adsp/libscveObjectSegmentation_skel.so
+vendor/lib/rfsa/adsp/libscveTextReco_skel.so
 
 # ANT+ (system) - from enchilada - PKQ1.180716.001
 lib64/com.qualcomm.qti.ant@1.0.so|199481b290856fb63f5c5bf6def426b43309becb
@@ -86,7 +90,10 @@ product/lib64/libaptXHD_encoder.so|e13fa70c97caaa24d061678bdee608eb8850a69e
 vendor/lib64/vendor.qti.hardware.fm@1.0_vendor.so
 
 # Camera
-vendor/bin/mm-qcamera-daemon
+# libshim_camera.so is built from camera_shims/libshim_camera.c in this device
+# tree; the former vendor copy was an unused stale blob.
+vendor/lib/libshim_metadata.so
+vendor/lib/libshim_mutex.so
 vendor/lib/libchromaflash.so
 vendor/lib/libflash_pmic.so
 vendor/lib/libjpegdhw.so
@@ -307,15 +314,16 @@ vendor/lib64/hw/gatekeeper.msm8996.so
 vendor/lib/hw/gatekeeper.msm8996.so
 
 # GPS
-vendor/bin/hw/vendor.qti.gnss@1.0-service
+# vendor.qti.gnss@1.0-service(.rc)/impl.so are NOT copied: the service dies on
+# Android 11 because its passthrough impl needs liblocationservice_glue.so
+# which DT_NEEDEDs libhidltransport (removed in R). We use the AOSP legacy
+# gnss@1.0 service instead (see msm8996.mk # GPS).
 vendor/bin/loc_launcher
 vendor/bin/lowi-server
 vendor/bin/slim_daemon
 vendor/bin/xtra-daemon
-vendor/etc/init/vendor.qti.gnss@1.0-service.rc
 vendor/etc/cacert_location.pem
 vendor/etc/xtra_root_cert.pem
-vendor/lib64/hw/vendor.qti.gnss@1.0-impl.so
 vendor/lib64/libdataitems.so
 vendor/lib64/libdrplugin_client.so
 vendor/lib64/libDRPlugin.so
@@ -327,8 +335,10 @@ vendor/lib64/libizat_core.so
 vendor/lib64/liblbs_core.so
 vendor/lib64/libloc_api_v02.so
 vendor/lib64/libloc_ds_api.so
-vendor/lib64/liblocationservice_glue.so
-vendor/lib64/liblocationservice.so
+# liblocationservice(_glue).so from the xiaomi GPS stack are NOT copied:
+# gree sensors.ssc.so needs the izat_manager::getIzatManager() stub built from
+# sensors/liblocationservice (returns null; the xiaomi blob would pull in a
+# full izat GPS stack and collides with the stub module name).
 vendor/lib64/liblowi_client.so
 vendor/lib64/liblowi_wifihal.so
 vendor/lib64/libulp2.so
@@ -486,11 +496,6 @@ vendor/lib/libmmosal_proprietary.so|4b0788590e1ecfccd3b20b3181a4add528acb2b6
 vendor/lib/libvpplibrary.so|816a79fe9a6d30e9402acb767119b9ee1c2c8aea
 vendor/lib/libvqzip.so|24e5eb30e5a2cdb544c8688d81d7cc75a1d85eaf
 
-# NFC - SmartCardService
-etc/permissions/org.simalliance.openmobileapi.xml
-framework/org.simalliance.openmobileapi.jar
--priv-app/SmartcardService/SmartcardService.apk
-
 # Perf - from op3 - PKQ1.181203.001
 vendor/bin/energy-awareness|3f1aa4d518ff361aa3ed9e41ace3e16d36cf0bbe
 vendor/bin/hw/vendor.qti.hardware.perf@1.0-service|7a38f7ef085ddb1a5cd8731e9d2fc1540c3e85ad
@@ -625,15 +630,15 @@ vendor/lib/libmdmdetect.so
 vendor/radio/qcril_database/qcril.db
 
 # Sensors - from op3 - PKQ1.181203.001
+# (lib64/libsensor1.so, lib64/libsensor_reg.so, lib64/sensors.ssc.so are NOT
+# copied: the GREE SSC stack in sensors/ provides those as prebuilt modules;
+# the 32-bit lib/ variants stay because nothing collides with them.)
 vendor/bin/sensors.qti|116403d330d6e1247cd5464261c1b06f12f86369
 vendor/lib/hw/activity_recognition.msm8996.so|6bec19a06f59abca3d43cd6a83c88fbe9daea7f6
 vendor/lib/libsensor1.so|de27fcd2ab95788e09310c5f2cf58a0540afcfe3
 vendor/lib/libsensor_reg.so|9a3568dc423598886b7f16d91d76e53cd0220387
 vendor/lib/sensors.ssc.so
 vendor/lib64/hw/activity_recognition.msm8996.so|64901bc837ed32dee28bbff9a60df7d8ac5cd140
-vendor/lib64/libsensor1.so|f8524d62d2ad52849f4a13b018baf08d0eac8180
-vendor/lib64/libsensor_reg.so|8ca48358abf3f8f84f86036b02dbb210a5870742
-vendor/lib64/sensors.ssc.so
 
 # Thermal - from op3 - PKQ1.181203.001
 vendor/bin/thermal-engine|b15c9e8fa54ebb15dfeb36c7fbc834a28b4c836e
