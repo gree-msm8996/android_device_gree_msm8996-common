@@ -1,0 +1,40 @@
+# init_sensors: the sensors-boot one-shot (/vendor/bin/init.gree.sensors.sh,
+# executed directly by init in post-fs-data). It waits for sensors.qcom to
+# serve /persist/sensors/sns.reg, boots the SLPI, waits for the subsystem to
+# come ONLINE, then sets sys.sensors.booted so init starts the sensors HAL.
+type init_sensors, domain;
+type init_sensors_exec, exec_type, vendor_file_type, file_type;
+
+init_daemon_domain(init_sensors)
+
+# The script's interpreter is /vendor/bin/sh (mksh copy in vendor).
+allow init_sensors vendor_shell_exec:file rx_file_perms;
+# pidof/ls/grep/cat/sleep resolve to toybox (PATH prefers /system/bin).
+allow init_sensors system_file:file rx_file_perms;
+allow init_sensors vendor_toolbox_exec:file rx_file_perms;
+
+# ls -l /proc/<pid of sensors.qcom>/fd to detect sns.reg ownership.
+allow init_sensors proc:dir search;
+allow init_sensors proc:file r_file_perms;
+allow init_sensors proc:lnk_file r_file_perms;
+
+# NOTE: pidof/ls /proc/<pid>/fd across domains needs sys_ptrace + cross-domain
+# file reads, both neverallow-blocked; the wait loop just falls through after
+# its 5s timeout, which is harmless (the daemon is started before the script).
+
+# echo 1 > /sys/kernel/boot_slpi/boot (labeled sysfs_slpi).
+allow init_sensors sysfs_slpi:file { open write getattr };
+allow init_sensors sysfs_slpi:dir search;
+
+# cat /sys/bus/msm_subsys/devices/subsys4/state (generic sysfs label).
+allow init_sensors sysfs:file { open read getattr };
+allow init_sensors sysfs:dir search;
+
+# echo diagnostics > /dev/kmsg
+allow init_sensors kmsg_device:chr_file { open write getattr };
+
+# setprop sys.sensors.booted 1 (type declared in property.te, labeled in
+# property_contexts). set_prop also grants the property_service socket
+# connect, which the bare property_service allow did not (setprop silently
+# failed and the script exited 1 without ever publishing the property).
+set_prop(init_sensors, vendor_sensors_boot_prop)

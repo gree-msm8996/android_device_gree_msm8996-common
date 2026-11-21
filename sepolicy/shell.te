@@ -1,0 +1,4 @@
+# adb shell getprop sys.sensors.booted: the property file lives in
+# /dev/__properties__ under vendor_sensors_boot_prop, which non-public
+# property types don't grant to shell by default (avc: denied { read }).
+get_prop(shell, vendor_sensors_boot_prop)

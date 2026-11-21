@@ -3,4 +3,11 @@ allow hal_sensors_default audioserver_service:service_manager find;
 
 allow hal_sensors_default sound_device:chr_file rw_file_perms;
 
+# sensor1 clients (this HAL) talk to sensors.qcom over the control socket
+# that init pre-creates for the daemon (labeled sensors_socket via
+# file_contexts); the HAL both writes to the socket file and connectto()s
+# the daemon's listening stream socket.
+allow hal_sensors_default sensors_socket:sock_file rw_file_perms;
+unix_socket_connect(hal_sensors_default, sensors, sensors)
+
 binder_use(hal_sensors_default)
