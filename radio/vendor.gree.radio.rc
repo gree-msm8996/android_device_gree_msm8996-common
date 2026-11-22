@@ -1,0 +1,101 @@
+# Gree telephony (G0245D): Qualcomm modem stack from the leeco
+# msm8996-common (G0215D) RIL/IMS blob set. qmuxd stays stock G0245D.
+#
+# Service definitions for rild, qmuxd and netmgrd come from init.qcom.rc.
+# This file is parsed after it, so "override" replaces the service bodies.
+
+on init
+    # qmuxd listens inside /dev/socket/qmux_radio; netmgrd needs its own dir.
+    mkdir /dev/socket/qmux_radio 0770 radio radio
+    chmod 2770 /dev/socket/qmux_radio
+    mkdir /dev/socket/netmgr 0770 radio radio
+
+on post-fs-data
+    # QCRIL keeps its settings and the ICCID cache here.
+    mkdir /data/misc/radio 0770 system radio
+    mkdir /data/misc/ipa 0700 net_admin net_admin
+    exec - root root -- /vendor/bin/sh /vendor/bin/init.gree.radio.sh
+
+# The modem is powered by msm8996-common/radio/libperipheral_client: every
+# client opens /dev/subsys_modem by itself, so pm-service is not needed. The
+# platform pm-service cannot run against that library anyway (it imports the
+# Android 11 IPeripheralManager interface) and restart-loops every 5 s.
+service vendor.per_mgr /vendor/bin/pm-service
+    override
+    disabled
+
+service qmuxd /vendor/bin/qmuxd
+    class main
+    user root
+    group radio audio bluetooth gps nfc diag inet
+
+# Android 6 netmgrd needs to program the IPA/rmnet data path, hence net_admin
+# and net_raw; the platform service (init.qcom.rc) lacks them.
+service vendor.netmgrd /vendor/bin/netmgrd
+    override
+    class main
+    user root
+    group root wifi wakelock radio inet net_admin net_raw
+    writepid /dev/cpuset/system-background/tasks
+
+# QCRIL writes /data/misc/radio and creates the rild sockets itself, so it
+# runs as root.
+service ril-daemon /vendor/bin/hw/rild
+    override
+    class main
+    user root
+    group radio cache inet misc audio log readproc wakelock diag
+    socket rild stream 660 root radio
+    socket rild-debug stream 660 radio system
+    socket sap_uim_socket1 stream 660 bluetooth bluetooth
+
+service ril-daemon2 /vendor/bin/hw/rild -c 2
+    override
+    class main
+    user root
+    group radio cache inet misc audio log readproc wakelock diag
+    socket rild2 stream 660 root radio
+    socket rild-debug2 stream 660 radio system
+    disabled
+
+# Without slot2 the framework never finishes PhoneFactory and stays stuck in
+# "getService(IRadio/slot2)" forever: slot1 gets no RADIO_POWER, no SIM status
+# is ever reported and gsm.sim.state stays empty. The property comes from the
+# stock build.prop (dsds); the second SIM is simply reported ABSENT.
+on property:persist.radio.multisim.config=dsds
+    start ril-daemon2
+
+# cnd (the CNE daemon) now links against the leeco libcne / libqmi_cci,
+# which export qmi_cci_os_signal_wait and the CneFactory ABI the whole
+# RIL/IMS set uses. Enable it so CNE assisted route setup works.
+# NOTE: an `override` replaces the *whole* service definition, so the body has
+# to be repeated verbatim -- dropping `socket ims_datad` below is what makes
+# imsdatadaemon die with "CANNOT get datad control socket".
+service vendor.cnd /system/vendor/bin/cnd
+    override
+    class main
+    user system
+    group system wifi inet radio wakelock net_admin
+
+# ipacm MUST run. G0215D can live without it because that port runs a 3.18
+# kernel with no IPA at all; this device runs 4.4 with IPA2.5, where every
+# WAN->APPS packet needs a filter rule (WWAN_0_PROD ep -> routing table ->
+# APPS_WAN_CONS) that only ipacm installs. The earlier "ipacm is broken"
+# conclusion came from two invalid counters -- see ROM_HANDOFF session 30:
+#   * the ip4_flt/ip4_rt debugfs files are 0 bytes by design in ipa_v2,
+#     the dump goes to the kernel log via pr_err();
+#   * stats "flow_enable" only tracks USB tethering flow control.
+# ipacm itself works here: it gets the rmnet_data0 netlink events, creates the
+# WAN iface, installs the IPv4 default DL filter rules and the
+# ipa_dflt_wan_rt routing rules, and deletes them on link down.
+service vendor.ipacm /system/vendor/bin/ipacm
+    override
+    class late_start
+    user radio
+    group radio inet
+
+# dpmQmiMgr provides com.qualcomm.qti.dpm.api@1.0::IdpmQmi/dpmQmiService, the
+# HIDL interface imsdatadaemon (DATAD) registers with. With it off, DATAD dies
+# with status 1 every 5 s. It is the same binary the leeco LOS 18.1 tree
+# ships, so it matches this vendor set; leave the stock rc in charge.
+
