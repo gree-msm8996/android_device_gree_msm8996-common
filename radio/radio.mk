@@ -25,7 +25,9 @@ PRODUCT_PACKAGES += \
 PRODUCT_COPY_FILES += \
     $(RADIO_PATH)/init.gree.radio.sh:$(TARGET_COPY_OUT_VENDOR)/bin/init.gree.radio.sh \
     $(RADIO_PATH)/vendor.gree.radio.rc:$(TARGET_COPY_OUT_VENDOR)/etc/init/vendor.gree.radio.rc \
-    $(RADIO_PATH)/mcfg/ct_openmkt_volte.mbn:$(TARGET_COPY_OUT_VENDOR)/etc/mcfg/ct_openmkt_volte.mbn
+    $(RADIO_PATH)/mcfg/ct_openmkt_volte.mbn:$(TARGET_COPY_OUT_VENDOR)/etc/mcfg/ct_openmkt_volte.mbn \
+    $(RADIO_PATH)/mcfg/cu_openmkt_volte.mbn:$(TARGET_COPY_OUT_VENDOR)/etc/mcfg/cu_openmkt_volte.mbn \
+    $(RADIO_PATH)/mcfg/cbn_openmkt_volte.mbn:$(TARGET_COPY_OUT_VENDOR)/etc/mcfg/cbn_openmkt_volte.mbn
 
 # CT VoLTE: enable the RIL mbn_sw feature so qcril scans
 # /data/vendor/radio/modem_config, builds the mbn index in qcril.db and

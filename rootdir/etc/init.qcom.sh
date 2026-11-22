@@ -55,28 +55,45 @@ chmod g-w /data/vendor/modem_config
 setprop ro.vendor.ril.mbn_copy_completed 1
 
 #
-# CT VoLTE: the stock G0245D modem ships no VoLTE-capable mcfg for China
-# Telecom (46011). RIL's mbn_sw feature (libril-qc-qmi-1) scans the hardcoded
-# directory /data/vendor/radio/modem_config/mcfg_sw, indexes every mcfg into
-# qcril.db and activates the one matching (MCC,MNC,VOLTE,OPENMKT,COMMERC).
-# We therefore point that directory at the copy made above and install a
-# patched CT "openmkt" mcfg whose trailer metadata says VOLTE + PLMN 460-11
-# (content NVs are the CU_VoLTE set: IMS_enable=1, ims_operation_mode=2).
+# 4-carrier VoLTE (CT 46011 / CU 460-1,6,9 / CBN 46015): the stock G0245D
+# modem ships no VoLTE-capable mcfg for China Telecom or China Broadcast and
+# marks China Unicom NOV.  RIL's mbn_sw feature (libril-qc-qmi-1) scans the
+# hardcoded directory /data/vendor/radio/modem_config/mcfg_sw, indexes every
+# mcfg into qcril.db and activates the one matching
+# (MCC,MNC,VOLTE,OPENMKT,COMMERC) for the inserted SIM.  We therefore bridge
+# that directory to the copy made above and install patched mcfg files whose
+# trailer metadata says VOLTE + the carrier's PLMNs (content NVs are the
+# CU_VoLTE set: IMS_enable=1, ims_operation_mode=2; CMCC 460-0/2/7/8 needs no
+# patch -- the stock cmcc/commerci/volte_op config is already VOLTE).
 # The mbn ELF hash segment (ph1) carries the SHA256 of the config segment, so
-# the shipped file is pre-patched and re-hashed; editing it by hand without
-# recomputing that hash makes the modem reject the PDC upload.
+# the shipped files are pre-patched and re-hashed; editing them by hand
+# without recomputing that hash makes the modem reject the PDC upload.
+# (init.g0245d.rc creates the symlink; the guard below is only a fallback.)
 #
 if [ ! -e /data/vendor/radio/modem_config ]; then
     ln -s /data/vendor/modem_config /data/vendor/radio/modem_config
 fi
-volte_mcfg=/vendor/etc/mcfg/ct_openmkt_volte.mbn
-volte_dst=/data/vendor/modem_config/mcfg_sw/generic/china/ct/commerci/openmkt/mcfg_sw.mbn
-if [ -f "$volte_mcfg" ] && [ -f "$volte_dst" ] && ! cmp -s "$volte_mcfg" "$volte_dst"; then
-    cat "$volte_mcfg" > "$volte_dst"
-    chown radio.root "$volte_dst"
-    chmod 0440 "$volte_dst"
+volte_changed=0
+for carrier in ct cu cbn; do
+    case $carrier in
+        ct) volte_dst=/data/vendor/modem_config/mcfg_sw/generic/china/ct/commerci/openmkt/mcfg_sw.mbn ;;
+        cu) volte_dst=/data/vendor/modem_config/mcfg_sw/generic/china/cu/commerci/openmkt/mcfg_sw.mbn ;;
+        cbn) volte_dst=/data/vendor/modem_config/mcfg_sw/generic/china/cbn/commerci/openmkt/mcfg_sw.mbn ;;
+    esac
+    volte_src=/vendor/etc/mcfg/${carrier}_openmkt_volte.mbn
+    if [ -f "$volte_src" ]; then
+        mkdir -p "${volte_dst%/*}"
+        if [ ! -f "$volte_dst" ] || ! cmp -s "$volte_src" "$volte_dst"; then
+            cat "$volte_src" > "$volte_dst"
+            chown radio.root "$volte_dst"
+            chmod 0440 "$volte_dst"
+            volte_changed=1
+        fi
+    fi
+done
+if [ "$volte_changed" = "1" ]; then
     # qcril.db caches the mbn metadata of the previous scan; force a rescan
-    # so the patched config is indexed before the mbn_sw flow runs.
+    # so the patched configs are indexed before the mbn_sw flow runs.
     rm -f /data/vendor/radio/qcril.db /data/vendor/radio/qcril_backup.db
     setprop persist.vendor.radio.sw_mbn_loaded 0
 fi
