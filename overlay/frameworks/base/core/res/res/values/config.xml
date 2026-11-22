@@ -174,7 +174,7 @@
     <integer name="config_screenBrightnessDoze">17</integer>
 
     <!-- Whether device supports double tap to wake -->
-    <bool name="config_supportDoubleTapWake">true</bool>
+    <bool name="config_supportDoubleTapWake">false</bool>
 
     <!-- Configure mobile tcp buffer sizes in the form:
          rat-name:rmem_min,rmem_def,rmem_max,wmem_min,wmem_def,wmem_max
@@ -278,4 +278,65 @@
 
     <!-- Disable rounded corners on windows to improve graphics performance -->
     <bool name="config_supportsRoundedCornersOnWindows">false</bool>
+
+    <!-- Auto-brightness: the RPR0521 provides a working ambient light sensor.
+         The framework default is disabled, so enable it and supply the lux to
+         backlight curve (1080p LCD panel, 0-255 backlight). -->
+    <bool name="config_automatic_brightness_available">true</bool>
+
+    <integer-array name="config_autoBrightnessLevels">
+        <item>1</item>
+        <item>4</item>
+        <item>5</item>
+        <item>8</item>
+        <item>13</item>
+        <item>17</item>
+        <item>21</item>
+        <item>26</item>
+        <item>30</item>
+        <item>34</item>
+        <item>39</item>
+        <item>60</item>
+        <item>140</item>
+        <item>310</item>
+        <item>400</item>
+        <item>500</item>
+        <item>600</item>
+        <item>1000</item>
+        <item>1200</item>
+        <item>1500</item>
+        <item>3000</item>
+        <item>3500</item>
+        <item>4000</item>
+    </integer-array>
+
+    <integer-array name="config_autoBrightnessLcdBacklightValues">
+        <item>2</item>
+        <item>3</item>
+        <item>3</item>
+        <item>15</item>
+        <item>15</item>
+        <item>15</item>
+        <item>15</item>
+        <item>31</item>
+        <item>39</item>
+        <item>43</item>
+        <item>43</item>
+        <item>44</item>
+        <item>45</item>
+        <item>48</item>
+        <item>55</item>
+        <item>60</item>
+        <item>63</item>
+        <item>67</item>
+        <item>84</item>
+        <item>93</item>
+        <item>105</item>
+        <item>200</item>
+        <item>240</item>
+        <item>255</item>
+    </integer-array>
+
+    <integer-array name="config_autoBrightnessButtonBacklightValues">
+    </integer-array>
 </resources>

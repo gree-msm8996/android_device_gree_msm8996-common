@@ -15,9 +15,9 @@
 # limitations under the License.
 #
 
-BOARD_VENDOR := xiaomi
+BOARD_VENDOR := gree
 
-VENDOR_PATH := device/xiaomi/msm8996-common
+VENDOR_PATH := device/gree/msm8996-common
 
 # Architecture
 TARGET_ARCH := arm64
@@ -51,7 +51,7 @@ BOARD_RAMDISK_OFFSET := 0x01000000
 BOARD_RAMDISK_USE_XZ := true
 TARGET_KERNEL_ARCH := arm64
 TARGET_KERNEL_CLANG_COMPILE := true
-TARGET_KERNEL_SOURCE := kernel/xiaomi/msm8996
+TARGET_KERNEL_SOURCE := kernel/gree/msm8996
 
 # Platform
 TARGET_BOARD_PLATFORM := msm8996
@@ -100,6 +100,12 @@ TARGET_SUPPORT_HAL1 := false
 TARGET_USES_MEDIA_EXTENSIONS := true
 TARGET_USES_QTI_CAMERA_DEVICE := true
 USE_DEVICE_SPECIFIC_CAMERA := true
+# G0245D ships the stock Android6 camera HAL + mm-camera/jpeg/lib2d interface
+# blobs via PRODUCT_COPY_FILES (vendor/gree). The LOS QCamera2 source modules
+# (camera.msm8996, libmmcamera_interface, libmmjpeg_interface,
+# libmmlib2d_interface) install to the same paths, so their build rules are
+# disabled to avoid duplicate-target collisions in ckati.
+TARGET_USES_STOCK_CAMERA_HAL := true
 
 # Display
 MAX_VIRTUAL_DISPLAY_DIMENSION := 4096
@@ -123,7 +129,9 @@ SF_VSYNC_EVENT_PHASE_OFFSET_NS := 6000000
 TARGET_ENABLE_MEDIADRM_64 := true
 
 # Encryption
-TARGET_HW_DISK_ENCRYPTION := true
+# gree G0245D first bring-up runs unencrypted (verified working state);
+# re-enable FDE (encryptable=footer + TARGET_HW_DISK_ENCRYPTION) later once
+# userdata/crypto layout is confirmed.
 
 # Filesystem
 TARGET_FS_CONFIG_GEN := $(VENDOR_PATH)/config.fs
@@ -144,12 +152,21 @@ BOARD_VENDORIMAGE_PARTITION_SIZE := 872415232
 BOARD_VENDORIMAGE_FILE_SYSTEM_TYPE := ext4
 BOARD_FLASH_BLOCK_SIZE := 262144 # (BOARD_KERNEL_PAGESIZE * 64)
 BOARD_ROOT_EXTRA_SYMLINKS := \
-    /mnt/vendor/persist:/persist \
     /vendor/dsp:/dsp \
     /vendor/firmware_mnt:/firmware \
     /vendor/bt_firmware:/bt_firmware
-TARGET_COPY_OUT_VENDOR := vendor
+# G0245D is system-as-vendor (no vendor/cust partition): vendor files
+# install into system/vendor. Keep the build default (system/vendor) so the
+# lineage sepolicy vendor dirs are compiled in (prebuilt-vendor-sepolicy mode
+# would drop the hal_lineage_livedisplay_sysfs type declaration).
 TARGET_USES_MKE2FS := true
+
+# /persist must be a REAL rootfs directory, not a symlink: sensors.qcom
+# validates realpath(/persist/sensors) against the literal path and rejects
+# the symlink, so the bind mount below never lands on /persist itself
+# (mount(2) follows the symlink onto /mnt/vendor/persist and the sensors
+# registry stays unreachable). As a real dir the bind mount works.
+BOARD_ROOT_EXTRA_FOLDERS += persist
 
 # Power
 TARGET_TAP_TO_WAKE_NODE := "/proc/touchpanel/double_tap_enable"
@@ -166,7 +183,7 @@ TARGET_USERIMAGES_USE_EXT4 := true
 TARGET_USERIMAGES_USE_F2FS := true
 
 # Releasetools
-TARGET_RECOVERY_UPDATER_LIBS := librecovery_updater_xiaomi
+TARGET_RECOVERY_UPDATER_LIBS := librecovery_updater_gree
 TARGET_RELEASETOOLS_EXTENSIONS := $(VENDOR_PATH)
 
 # Security patch level
@@ -178,8 +195,8 @@ include device/qcom/sepolicy-legacy-um/SEPolicy.mk
 BOARD_SEPOLICY_DIRS += $(VENDOR_PATH)/sepolicy
 
 # Vendor init
-TARGET_INIT_VENDOR_LIB := //$(VENDOR_PATH):libinit.xiaomi_8996
-TARGET_RECOVERY_DEVICE_MODULES := libinit.xiaomi_8996
+TARGET_INIT_VENDOR_LIB := //$(VENDOR_PATH):libinit.gree_8996
+TARGET_RECOVERY_DEVICE_MODULES := libinit.gree_8996
 
 # Wifi
 BOARD_HAS_QCOM_WLAN := true
@@ -198,4 +215,4 @@ WIFI_HIDL_UNIFIED_SUPPLICANT_SERVICE_RC_ENTRY := true
 WPA_SUPPLICANT_VERSION := VER_0_8_X
 
 # Inherit from the proprietary version
--include vendor/xiaomi/msm8996-common/BoardConfigVendor.mk
+-include vendor/gree/msm8996-common/BoardConfigVendor.mk

@@ -108,6 +108,12 @@ PRODUCT_PROPERTY_OVERRIDES += \
     vendor.display.perf_hint_window=50 \
     vendor.gralloc.enable_fb_ubwc=1
 
+# Camera: the stock Android6 HAL defaults preview/video to UBWC output, but
+# gralloc1 hands the framework linear NV12 -> garbled green viewfinder.
+PRODUCT_PROPERTY_OVERRIDES += \
+    persist.camera.preview.ubwc=0 \
+    persist.camera.video.ubwc=0
+
 # IMS
 PRODUCT_PROPERTY_OVERRIDES += \
     persist.dbg.volte_avail_ovr=1 \
@@ -123,11 +129,6 @@ PRODUCT_PROPERTY_OVERRIDES += \
 PRODUCT_PROPERTY_OVERRIDES += \
     ro.vendor.qti.sys.fw.bservice_enable=true
 
-# NFC
-PRODUCT_PROPERTY_OVERRIDES += \
-    ro.nfc.port=I2C \
-    persist.nfc.smartcard.config=SIM1,SIM2,eSE1
-
 # Perf
 PRODUCT_PROPERTY_OVERRIDES += \
     ro.vendor.extension_library=libqti-perfd-client.so \
@@ -138,13 +139,19 @@ PRODUCT_PROPERTY_OVERRIDES += \
     ro.control_privapp_permissions=enforce
 
 # Radio
+# ro.telephony.default_network / telephony.lteOnCdmaDevice follow the stock
+# G0245D build.prop (HALO 1.2.4: default_network=10, lteOnCdmaDevice=1).
+# With the xiaomi default (20,20, TD-SCDMA in the acq order) the modem measures
+# LTE cells but never reports a camped network (gsm.network.type=Unknown);
+# with 10,10 the PS domain registers HOME on LTE.
 PRODUCT_PROPERTY_OVERRIDES += \
     DEVICE_PROVISIONED=1 \
     rild.libpath=/vendor/lib64/libril-qc-qmi-1.so \
     ril.subscription.types=NV,RUIM \
+    telephony.lteOnCdmaDevice=1 \
     ro.telephony.call_ring.multiple=false \
     ro.telephony.default_cdma_sub=0 \
-    ro.telephony.default_network=20,20 \
+    ro.telephony.default_network=10,10 \
     persist.data.qmi.adb_logmask=0 \
     persist.net.doxlat=true \
     persist.radio.apm_sim_not_pwdn=1 \
