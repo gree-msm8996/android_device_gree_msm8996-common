@@ -32,8 +32,11 @@
 
 #include <string>
 #include <cstring>
+#include <sstream>
 #include <DataItemId.h>
 #include <IDataItemCore.h>
+#include <gps_extended_c.h>
+#include <inttypes.h>
 
 #define MAC_ADDRESS_LENGTH    6
 // MAC address length in bytes
@@ -41,9 +44,64 @@
 #define SRN_MAC_ADDRESS_LENGTH    6
 #define WIFI_SUPPLICANT_DEFAULT_STATE    0
 
+static constexpr char sDelimit = ':';
+
 namespace loc_core
 {
 using namespace std;
+
+/* Keep this in sync with the leeco libdataitems.so ABI. */
+enum NetworkType {
+    TYPE_MOBILE = 0,
+    TYPE_WIFI,
+    TYPE_ETHERNET,
+    TYPE_BLUETOOTH,
+    TYPE_MMS,
+    TYPE_SUPL,
+    TYPE_DUN,
+    TYPE_HIPRI,
+    TYPE_WIMAX,
+    TYPE_PROXY,
+    TYPE_UNKNOWN,
+};
+
+typedef struct NetworkInfoType
+{
+    uint64_t networkHandle;
+    NetworkType networkType;
+    NetworkInfoType() : networkHandle(NETWORK_HANDLE_UNKNOWN), networkType(TYPE_UNKNOWN) {}
+    NetworkInfoType(string strObj) {
+        size_t posDelimit = strObj.find(sDelimit);
+        if (posDelimit != string::npos) {
+            int32_t type = TYPE_UNKNOWN;
+            string handleStr = strObj.substr(0, posDelimit);
+            string typeStr = strObj.substr(posDelimit + 1, strObj.length() - posDelimit - 1);
+            stringstream(handleStr) >> networkHandle;
+            stringstream(typeStr) >> type;
+            networkType = (NetworkType) type;
+        } else {
+            networkHandle = NETWORK_HANDLE_UNKNOWN;
+            networkType = TYPE_UNKNOWN;
+        }
+    }
+    bool operator== (const NetworkInfoType& other) {
+        return ((networkHandle == other.networkHandle) && (networkType == other.networkType));
+    }
+    string toString() {
+        string valueStr;
+        valueStr.clear ();
+        char nethandle [32];
+        memset (nethandle, 0, 32);
+        snprintf(nethandle, sizeof(nethandle), "%" PRIu64, networkHandle);
+        valueStr += string(nethandle);
+        valueStr += sDelimit;
+        char type [12];
+        memset (type, 0, 12);
+        snprintf (type, 12, "%u", networkType);
+        valueStr += string (type);
+        return valueStr;
+    }
+} NetworkInfoType;
 
 class AirplaneModeDataItemBase : public IDataItemCore  {
 public:
@@ -222,44 +280,46 @@ protected:
 class NetworkInfoDataItemBase : public IDataItemCore {
 public:
     NetworkInfoDataItemBase(
-    int32_t type, string typeName, string subTypeName,
-    bool available, bool connected, bool roaming ):
+    NetworkType initialType, int32_t type, string typeName, string subTypeName,
+    bool available, bool connected, bool roaming, uint64_t networkHandle ):
+            mAllTypes(typeToAllTypes(initialType)),
             mType(type),
             mTypeName(typeName),
             mSubTypeName(subTypeName),
             mAvailable(available),
             mConnected(connected),
             mRoaming(roaming),
-            mId(NETWORKINFO_DATA_ITEM_ID) {}
+            mNetworkHandle(networkHandle),
+            mId(NETWORKINFO_DATA_ITEM_ID) {
+                mAllNetworkHandles[0].networkHandle = networkHandle;
+                mAllNetworkHandles[0].networkType = initialType;
+            }
     virtual ~NetworkInfoDataItemBase() {}
     inline virtual DataItemId getId() { return mId; }
     virtual void stringify(string& /*valueStr*/) {}
     virtual int32_t copy(IDataItemCore* /*src*/, bool* /*dataItemCopied = NULL*/) {return 1;}
-    enum NetworkType {
-        TYPE_UNKNOWN,
-        TYPE_MOBILE,
-        TYPE_WIFI,
-        TYPE_ETHERNET,
-        TYPE_BLUETOOTH,
-        TYPE_MMS,
-        TYPE_SUPL,
-        TYPE_DUN,
-        TYPE_HIPRI,
-        TYPE_WIMAX
-    };
     inline virtual NetworkType getType(void) const {
         return (NetworkType)mType;
     }
-// Data members
+    inline uint64_t getAllTypes() { return mAllTypes; }
+    inline NetworkInfoType* getNetworkHandle() {
+        return &mAllNetworkHandles[0];
+    }
+    // Data members - layout must match leeco libdataitems.so
+    uint64_t mAllTypes;
     int32_t mType;
     string mTypeName;
     string mSubTypeName;
     bool mAvailable;
     bool mConnected;
     bool mRoaming;
+    NetworkInfoType mAllNetworkHandles[MAX_NETWORK_HANDLES];
+    uint64_t mNetworkHandle;
 protected:
     DataItemId mId;
-
+    inline uint64_t typeToAllTypes(NetworkType type) {
+        return (type >= TYPE_UNKNOWN || type < TYPE_MOBILE) ? 0 : (1ULL << type);
+    }
 };
 
 class ServiceStatusDataItemBase : public IDataItemCore {

@@ -453,12 +453,14 @@ public:
             bool connected=false,
             bool roaming=false) :
             NetworkInfoDataItemBase(
+                    (NetworkType)type,
                     type,
                     typeName,
                     subTypeName,
-                    available,
+                    connected && (!roaming),
                     connected,
-                    roaming) {}
+                    roaming,
+                    NETWORK_HANDLE_UNKNOWN) {}
     inline SystemStatusNetworkInfo(const NetworkInfoDataItemBase& itemBase) :
             NetworkInfoDataItemBase(itemBase) {
         mType = itemBase.getType();

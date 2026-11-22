@@ -1282,6 +1282,10 @@ typedef void (*LocAgpsOpenResultCb)(bool isSuccess, AGpsExtType agpsType, const 
 
 typedef void (*LocAgpsCloseResultCb)(bool isSuccess, AGpsExtType agpsType, void* userDataPtr);
 
+/* Network handle support for the leeco libdataitems ABI. */
+typedef uint64_t NetworkHandle;
+#define NETWORK_HANDLE_UNKNOWN  ~0
+#define MAX_NETWORK_HANDLES 10
 
 #ifdef __cplusplus
 }

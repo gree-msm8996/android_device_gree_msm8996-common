@@ -1,0 +1,4 @@
+# The source-built QTI GNSS HAL opens /dev/subsys_modem to receive modem
+# subsystem-restart notifications. This is the same read-only grant used by
+# rild and the other Qualcomm HALs in the legacy policy.
+allow hal_gnss_qti ssr_device:chr_file r_file_perms;

@@ -335,7 +335,11 @@ vendor/bin/slim_daemon
 vendor/bin/xtra-daemon
 vendor/etc/cacert_location.pem
 vendor/etc/xtra_root_cert.pem
-vendor/lib64/libdataitems.so
+# libdataitems.so must match the NetworkInfoDataItemBase layout compiled into
+# libloc_core (network handles / mAllTypes). The leeco copy is the matching
+# generation; the older Xiaomi copy crashes AGnssRil::updateNetworkState with
+# std::bad_alloc in NetworkInfoDataItem::copy().
+vendor/lib64/libdataitems.so|0ff60a5f4273cc3eb9f1f8a4d7bd204107375cec
 vendor/lib64/libdrplugin_client.so
 vendor/lib64/libDRPlugin.so
 vendor/lib64/libevent_observer.so
