@@ -17,3 +17,9 @@ allow init sysfs_devices_system_cpu:file { open write };
 # ROMs can keep a stale owner on /data/misc/bluedroid.
 allow init bluetooth_data_file:dir setattr;
 
+# Stale camera socket cleanup in init.g0245d.rc.  A daemon killed mid-session
+# can leave cam_socket* behind; remove it before class main restarts the
+# daemon so CameraService sees a freshly bound socket.
+allow init camera_data_file:dir remove_name;
+allow init camera_data_file:sock_file unlink;
+
