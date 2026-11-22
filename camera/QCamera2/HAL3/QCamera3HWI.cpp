@@ -114,6 +114,43 @@ extern pthread_mutex_t gCamLock;
 volatile uint32_t gCamHal3LogLevel = 1;
 extern uint8_t gNumCameraSessions;
 
+/* G0245D: the stock mm-qcamera-daemon is from the CM13/CAF6 era.  In that
+ * metadata_buffer_t, CAM_INTF_META_STREAM_INFO is enum 108 and its payload is
+ * at base+0x3D650 (196 bytes, confirmed from the stock HAL's
+ * QCameraParameters::sendStreamConfigInfo()).  This LOS HAL uses enum 112 and
+ * a different payload offset, so daemon never sees the stream configuration
+ * that normally triggers ISP resource allocation.  Mirror it into the stock
+ * slot before every set_parms() that carries stream info. */
+static void g0245d_mirror_stream_info(metadata_buffer_t *buf,
+                                      const cam_stream_size_info_t &info)
+{
+    if (buf == NULL) {
+        return;
+    }
+    uint8_t *base = reinterpret_cast<uint8_t *>(buf);
+    base[108] = 1;  /* is_valid[CAM_INTF_META_STREAM_INFO] in stock layout */
+    const size_t kBufSize = 196;
+    size_t n = sizeof(info) < kBufSize ? sizeof(info) : kBufSize;
+    memcpy(base + 0x3D650, &info, n);
+}
+
+/* G0245D: same ABI gap for CAM_INTF_PARM_HAL_VERSION.  In the stock
+ * metadata_buffer_t the get_pointer_of() TBH branch for enum 1 returns
+ * base+0x3D0C8 (0x3D000+0xC8); the LOS HAL writes to base+0x72DB0.  The
+ * stock daemon therefore reads HAL version 0 and logs
+ * "sensor_pick_get_method_by_hal: Invalid HAL version : 0".  Mirror the
+ * value into the stock slot. */
+static void g0245d_mirror_hal_version(metadata_buffer_t *buf, int32_t version)
+{
+    if (buf == NULL) {
+        return;
+    }
+    uint8_t *base = reinterpret_cast<uint8_t *>(buf);
+    base[1] = 1;  /* is_valid[CAM_INTF_PARM_HAL_VERSION] in stock layout */
+    int32_t stock_version = version;
+    memcpy(base + 0x3D0C8, &stock_version, sizeof(stock_version));
+}
+
 const QCamera3HardwareInterface::QCameraPropMap QCamera3HardwareInterface::CDS_MAP [] = {
     {"On",  CAM_CDS_MODE_ON},
     {"Off", CAM_CDS_MODE_OFF},
@@ -574,6 +611,7 @@ QCamera3HardwareInterface::~QCamera3HardwareInterface()
             clear_metadata_buffer(mParameters);
             ADD_SET_PARAM_ENTRY_TO_BATCH(mParameters, CAM_INTF_META_STREAM_INFO,
                     stream_config_info);
+            g0245d_mirror_stream_info(mParameters, stream_config_info);
             int rc = mCameraHandle->ops->set_parms(mCameraHandle->camera_handle, mParameters);
             if (rc < 0) {
                 LOGE("set_parms failed for unconfigure");
@@ -1178,6 +1216,17 @@ int32_t QCamera3HardwareInterface::getSensorOutputSize(cam_dimension_t &sensor_d
         return rc;
     }
 
+    /* G0245D: the stock mm-qcamera-daemon was built with the CM13/CAF6
+     * metadata_buffer_t and reads MAX_DIMENSION at 0x3D5B0, whereas this HAL
+     * writes it at the LOS offset (0x73264).  Mirror the two dimension words
+     * into the stock slot so the daemon can configure the sensor -> ISP link.
+     * The stock slot is far outside any LOS param, so this cannot corrupt
+     * normal HAL-side params. */
+    {
+        cam_dimension_t *stockMax = (cam_dimension_t *)((uint8_t *)mParameters + 0x3D5B0);
+        *stockMax = max_dim;
+    }
+
     rc = mCameraHandle->ops->set_parms(mCameraHandle->camera_handle, mParameters);
     if (rc != NO_ERROR) {
         LOGE("Failed to set CAM_INTF_PARM_MAX_DIMENSION");
@@ -1195,7 +1244,24 @@ int32_t QCamera3HardwareInterface::getSensorOutputSize(cam_dimension_t &sensor_d
     }
 
     READ_PARAM_ENTRY(mParameters, CAM_INTF_PARM_RAW_DIMENSION, sensor_dim);
+    /* G0245D: daemon answers RAW_DIMENSION in the stock slot 0x3D5B8. */
+    {
+        cam_dimension_t stockRaw =
+                *(cam_dimension_t *)((uint8_t *)mParameters + 0x3D5B8);
+        if (stockRaw.width > 0 && stockRaw.height > 0)
+            sensor_dim = stockRaw;
+    }
     LOGH("sensor output dimension = %d x %d", sensor_dim.width, sensor_dim.height);
+
+    /* G0245D: the stock daemon does not answer RAW_DIMENSION (returns 0x0),
+     * which makes QCamera3CropRegionMapper silently reject its update and
+     * leaves crop mapping uninitialised.  Fall back to the sensor array size
+     * we installed in the capability blob. */
+    if (sensor_dim.width <= 0 || sensor_dim.height <= 0) {
+        sensor_dim = gCamCapability[mCameraId]->pixel_array_size;
+        LOGW("G0245D: RAW_DIMENSION was 0x0, using %dx%d",
+                sensor_dim.width, sensor_dim.height);
+    }
 
     return rc;
 }
@@ -3578,8 +3644,10 @@ int QCamera3HardwareInterface::processCaptureRequest(
             clear_metadata_buffer(mParameters);
             ADD_SET_PARAM_ENTRY_TO_BATCH(mParameters,
                     CAM_INTF_PARM_HAL_VERSION, hal_version);
+            g0245d_mirror_hal_version(mParameters, hal_version);
             ADD_SET_PARAM_ENTRY_TO_BATCH(mParameters,
                     CAM_INTF_META_STREAM_INFO, stream_config_info);
+            g0245d_mirror_stream_info(mParameters, stream_config_info);
             rc = mCameraHandle->ops->set_parms(mCameraHandle->camera_handle,
                     mParameters);
             if (rc < 0) {
@@ -3602,6 +3670,7 @@ int QCamera3HardwareInterface::processCaptureRequest(
             mCaptureIntent = captureIntent;
             clear_metadata_buffer(mParameters);
             ADD_SET_PARAM_ENTRY_TO_BATCH(mParameters, CAM_INTF_PARM_HAL_VERSION, hal_version);
+            g0245d_mirror_hal_version(mParameters, hal_version);
             ADD_SET_PARAM_ENTRY_TO_BATCH(mParameters, CAM_INTF_META_CAPTURE_INTENT, captureIntent);
         }
 
@@ -3635,8 +3704,15 @@ int QCamera3HardwareInterface::processCaptureRequest(
             }
         }
 
+        /* G0245D: the stock daemon also needs the HAL version in this batch;
+         * otherwise sensor_pick_get_method_by_hal() logs HAL version 0. */
+        int32_t hal_version = CAM_HAL_V3;
+        ADD_SET_PARAM_ENTRY_TO_BATCH(mParameters,
+                CAM_INTF_PARM_HAL_VERSION, hal_version);
+        g0245d_mirror_hal_version(mParameters, hal_version);
         ADD_SET_PARAM_ENTRY_TO_BATCH(mParameters,
                 CAM_INTF_META_STREAM_INFO, mStreamConfigInfo);
+        g0245d_mirror_stream_info(mParameters, mStreamConfigInfo);
 
         int32_t tintless_value = 1;
         ADD_SET_PARAM_ENTRY_TO_BATCH(mParameters,
@@ -6418,6 +6494,182 @@ void QCamera3HardwareInterface::convertLandmarks(
 }
 
 #define DATA_PTR(MEM_OBJ,INDEX) MEM_OBJ->getPtr( INDEX )
+
+/* ==========================================================================
+ * G0245D capability fixup
+ *
+ * The stock mm-qcamera-daemon this port relies on was built from the
+ * Android 6.0 (CM13) era camera stack.  It writes a 12496-byte
+ * cam_capability_t blob with that generation's field layout, and -- being a
+ * HAL1-era capability filler -- it never populates any of the resolution
+ * tables (picture/preview/video sizes, pixel/active array, white level ...).
+ *
+ * This HAL, however, is compiled against the LineageOS 18.1 20764-byte
+ * cam_capability_t, so every field read is misaligned and all size tables are
+ * empty.  Result: static metadata advertises
+ * availableProcessedSizes=int32[0], pixelArraySize=[0 0], fps ranges=[],
+ * and the Camera2 app crashes in StreamConfiguration construction.
+ *
+ * Patch the LOS-layout capability in place right after the daemon query,
+ * using values taken from the stock sensor blobs (imx258 4208x3120,
+ * ov8856_cmb199 2592x1944) and media_profiles_V1_0.xml.  Only fields that
+ * the daemon either misplaces or never writes are touched; the rest of the
+ * capability blob is left exactly as the daemon produced it.
+ * ========================================================================== */
+#define G0245D_ARRAY_SIZE(a) (sizeof(a)/sizeof((a)[0]))
+
+static void g0245d_fixup_capability(cam_capability_t *cap, uint32_t cameraId)
+{
+    static const cam_fps_range_t kFpsRanges[] = {
+        {15.0f, 15.0f, 15.0f, 15.0f},
+        {20.0f, 20.0f, 20.0f, 20.0f},
+        {24.0f, 24.0f, 24.0f, 24.0f},
+        {30.0f, 30.0f, 30.0f, 30.0f},
+    };
+    /* imx258 (rear, 13MP) -- max 4208x3120 from sensor blob @0x320c */
+    static const cam_dimension_t kRearPicSizes[] = {
+        {4208, 3120}, {3840, 2160}, {3264, 2448}, {2592, 1944},
+        {2048, 1536}, {1920, 1080}, {1280, 720},  {640, 480},
+    };
+    static const cam_dimension_t kRearPreviewSizes[] = {
+        {1920, 1080}, {1280, 720}, {960, 540}, {640, 480}, {320, 240},
+    };
+    static const cam_dimension_t kRearVideoSizes[] = {
+        {3840, 2160}, {1920, 1080}, {1280, 720}, {640, 480},
+    };
+    /* ov8856_cmb199 (front, 5MP) -- max 2592x1944 from sensor blob @0x320c */
+    static const cam_dimension_t kFrontPicSizes[] = {
+        {2592, 1944}, {1920, 1080}, {1280, 720}, {640, 480},
+    };
+    static const cam_dimension_t kFrontPreviewSizes[] = {
+        {1280, 720}, {960, 540}, {640, 480}, {320, 240},
+    };
+    static const cam_dimension_t kFrontVideoSizes[] = {
+        {1920, 1080}, {1280, 720}, {640, 480},
+    };
+
+    const bool rear = (cameraId == 0);
+    const cam_dimension_t *pic = rear ? kRearPicSizes : kFrontPicSizes;
+    const size_t picN = rear ? G0245D_ARRAY_SIZE(kRearPicSizes) : G0245D_ARRAY_SIZE(kFrontPicSizes);
+    const cam_dimension_t *prev = rear ? kRearPreviewSizes : kFrontPreviewSizes;
+    const size_t prevN = rear ? G0245D_ARRAY_SIZE(kRearPreviewSizes) : G0245D_ARRAY_SIZE(kFrontPreviewSizes);
+    const cam_dimension_t *vid = rear ? kRearVideoSizes : kFrontVideoSizes;
+    const size_t vidN = rear ? G0245D_ARRAY_SIZE(kRearVideoSizes) : G0245D_ARRAY_SIZE(kFrontVideoSizes);
+
+    /* fps ranges: values read back from the stock capability blob @508 */
+    cap->fps_ranges_tbl_cnt = G0245D_ARRAY_SIZE(kFpsRanges);
+    memcpy(cap->fps_ranges_tbl, kFpsRanges, sizeof(kFpsRanges));
+
+    /* resolution tables that the stock daemon never fills */
+    cap->picture_sizes_tbl_cnt = picN;
+    memcpy(cap->picture_sizes_tbl, pic, picN * sizeof(cam_dimension_t));
+    cap->preview_sizes_tbl_cnt = prevN;
+    memcpy(cap->preview_sizes_tbl, prev, prevN * sizeof(cam_dimension_t));
+    cap->video_sizes_tbl_cnt = vidN;
+    memcpy(cap->video_sizes_tbl, vid, vidN * sizeof(cam_dimension_t));
+
+    /* one frame duration per advertised picture size (30 fps baseline) */
+    for (size_t i = 0; i < picN; i++)
+        cap->picture_min_duration[i] = (int64_t)33333333;
+
+    /* sensor geometry / array info */
+    cap->pixel_array_size.width  = rear ? 4224 : 2608;
+    cap->pixel_array_size.height = rear ? 3144 : 1960;
+    cap->active_array_size.left = 0;
+    cap->active_array_size.top = 0;
+    cap->active_array_size.width  = rear ? 4208 : 2592;
+    cap->active_array_size.height = rear ? 3120 : 1944;
+    cap->white_level = rear ? 1023 : 1023;
+    cap->sensor_physical_size[0] = rear ? 5.76f : 3.68f;
+    cap->sensor_physical_size[1] = rear ? 4.29f : 2.76f;
+
+    /* exposure / timing (exp range read back from stock blob @8680/@8684) */
+    cap->exposure_compensation_min = -100;
+    cap->exposure_compensation_max = 100;
+    cap->exposure_compensation_default = 0;
+    cap->exp_compensation_step.numerator = 1;
+    cap->exp_compensation_step.denominator = 3;
+    cap->max_frame_duration = (int64_t)33333333;
+    cap->exposure_time_range[0] = (int64_t)100000;
+    cap->exposure_time_range[1] = (int64_t)100000000;
+
+    /* zoom: avoid zoom_ratio_tbl_cnt==0 -> zoom_ratio_tbl[-1] OOB read */
+    cap->zoom_ratio_tbl_cnt = 1;
+    cap->zoom_ratio_tbl[0] = 100;
+
+    /* basic 3A / control modes so the mandatory Camera2 tags are non-empty */
+    cap->supported_effects_cnt = 3;
+    cap->supported_effects[0] = CAM_EFFECT_MODE_OFF;
+    cap->supported_effects[1] = CAM_EFFECT_MODE_MONO;
+    cap->supported_effects[2] = CAM_EFFECT_MODE_SEPIA;
+    cap->supported_scene_modes_cnt = 2;
+    cap->supported_scene_modes[0] = CAM_SCENE_MODE_OFF;
+    cap->supported_scene_modes[1] = CAM_SCENE_MODE_FACE_PRIORITY;
+    cap->supported_antibandings_cnt = 4;
+    cap->supported_antibandings[0] = CAM_ANTIBANDING_MODE_OFF;
+    cap->supported_antibandings[1] = CAM_ANTIBANDING_MODE_50HZ;
+    cap->supported_antibandings[2] = CAM_ANTIBANDING_MODE_60HZ;
+    cap->supported_antibandings[3] = CAM_ANTIBANDING_MODE_AUTO;
+    cap->supported_focus_modes_cnt = rear ? 4 : 2;
+    cap->supported_focus_modes[0] = CAM_FOCUS_MODE_OFF;
+    cap->supported_focus_modes[1] = CAM_FOCUS_MODE_AUTO;
+    if (rear) {
+        cap->supported_focus_modes[2] = CAM_FOCUS_MODE_MACRO;
+        cap->supported_focus_modes[3] = CAM_FOCUS_MODE_CONTINOUS_PICTURE;
+    }
+    cap->supported_white_balances_cnt = 6;
+    cap->supported_white_balances[0] = CAM_WB_MODE_OFF;
+    cap->supported_white_balances[1] = CAM_WB_MODE_AUTO;
+    cap->supported_white_balances[2] = CAM_WB_MODE_INCANDESCENT;
+    cap->supported_white_balances[3] = CAM_WB_MODE_FLUORESCENT;
+    cap->supported_white_balances[4] = CAM_WB_MODE_DAYLIGHT;
+    cap->supported_white_balances[5] = CAM_WB_MODE_CLOUDY_DAYLIGHT;
+    cap->supported_ae_modes_cnt = 2;
+    cap->supported_ae_modes[0] = CAM_AE_MODE_OFF;
+    cap->supported_ae_modes[1] = CAM_AE_MODE_ON;
+    cap->flash_available = rear ? 1 : 0;
+    cap->flash_charge_duration = (int32_t)200000000; /* stock blob @11392 */
+
+    /* misc scalars consumed by metadata */
+    cap->sensor_mount_angle = rear ? 90 : 270;
+    cap->position = rear ? CAM_POSITION_BACK : CAM_POSITION_FRONT;
+    cap->sensitivity_range.min_sensitivity = 100;
+    cap->sensitivity_range.max_sensitivity = 1600;
+    cap->max_analog_sensitivity = 800;
+    cap->color_arrangement = CAM_FILTER_ARRANGEMENT_RGGB;
+    cap->num_color_channels = 3;
+    cap->focal_length = 3.5f;
+    cap->apertures_count = 1;
+    cap->apertures[0] = 2.0f;
+    cap->black_level_pattern[0] = 16;
+    cap->black_level_pattern[1] = 16;
+    cap->black_level_pattern[2] = 16;
+    cap->black_level_pattern[3] = 16;
+    cap->base_gain_factor.numerator = 1;
+    cap->base_gain_factor.denominator = 1;
+
+    /* stream-config path: max viewfinder + buffer padding (all zero from
+     * the stock daemon).  The padding MUST be non-zero: PAD_TO_SIZE(x, 0)
+     * evaluates to 0 in 32-bit arithmetic, which makes mm_stream_calc_offset
+     * produce stride=0/scanline=0 and the daemon's ISP link creation fail.
+     * These are the CAF msm8996 alignment values (64/64/4096). */
+    cap->max_viewfinder_size.width = rear ? 1920 : 1280;
+    cap->max_viewfinder_size.height = rear ? 1080 : 720;
+    cap->padding_info.width_padding = 64;
+    cap->padding_info.height_padding = 64;
+    cap->padding_info.plane_padding = 4096;
+    cap->padding_info.offset_info.offset_x = 0;
+    cap->padding_info.offset_info.offset_y = 0;
+    cap->padding_info.min_stride = 64;
+    cap->padding_info.min_scanline = 64;
+
+    ALOGE("G0245D cap fixup cam%u: pic=%zu prev=%zu vid=%zu fps=%zu "
+          "array=%dx%d/%dx%d", cameraId, picN, prevN, vidN,
+          cap->fps_ranges_tbl_cnt, cap->active_array_size.width,
+          cap->active_array_size.height, cap->pixel_array_size.width,
+          cap->pixel_array_size.height);
+}
+
 /*===========================================================================
  * FUNCTION   : initCapabilities
  *
@@ -6482,6 +6734,11 @@ int QCamera3HardwareInterface::initCapabilities(uint32_t cameraId)
     }
     memcpy(gCamCapability[cameraId], DATA_PTR(capabilityHeap,0),
                                         sizeof(cam_capability_t));
+
+    /* G0245D: stock daemon writes a HAL1-era 12496B capability with no size
+     * tables; this HAL reads the LOS 20764B layout.  Fill the fields the
+     * daemon leaves empty/misplaced so static metadata is valid. */
+    g0245d_fixup_capability(gCamCapability[cameraId], cameraId);
 
     int index;
     for (index = 0; index < CAM_ANALYSIS_INFO_MAX; index++) {
@@ -8636,6 +8893,7 @@ int QCamera3HardwareInterface::setFrameParameters(
         LOGE("Failed to set hal version in the parameters");
         return BAD_VALUE;
     }
+    g0245d_mirror_hal_version(mParameters, hal_version);
 
     /*we need to update the frame number in the parameters*/
     if (ADD_SET_PARAM_ENTRY_TO_BATCH(mParameters, CAM_INTF_META_FRAME_NUMBER,
@@ -10713,6 +10971,7 @@ int32_t QCamera3HardwareInterface::dynamicUpdateMetaStreamInfo()
     /* Send meta stream info once again so that ISP can start */
     ADD_SET_PARAM_ENTRY_TO_BATCH(mParameters,
             CAM_INTF_META_STREAM_INFO, mStreamConfigInfo);
+    g0245d_mirror_stream_info(mParameters, mStreamConfigInfo);
     rc = mCameraHandle->ops->set_parms(mCameraHandle->camera_handle,
             mParameters);
     if (rc < 0) {

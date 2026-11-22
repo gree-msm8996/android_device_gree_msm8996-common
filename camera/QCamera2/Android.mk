@@ -2,6 +2,7 @@ ifneq (,$(filter $(TARGET_ARCH), arm arm64))
 
 LOCAL_PATH:= $(call my-dir)
 
+ifneq ($(TARGET_USES_STOCK_CAMERA_HAL),true)
 include $(CLEAR_VARS)
 
 LOCAL_SRC_FILES := \
@@ -135,6 +136,7 @@ LOCAL_MODULE_TAGS := optional
 
 LOCAL_32_BIT_ONLY := $(BOARD_QTI_CAMERA_32BIT_ONLY)
 include $(BUILD_SHARED_LIBRARY)
+endif
 
 include $(CLEAR_VARS)
 LOCAL_MODULE := camera_common_headers
