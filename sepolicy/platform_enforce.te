@@ -1,0 +1,153 @@
+# G0245D SELinux allowances for enforcing mode.
+# Collected from dmesg avc denials of the fully-booted permissive system
+# (2026-11-16). crash_dump and flags_health_check read noise intentionally
+# not covered: both are non-fatal under enforcing.
+
+# --- lights HAL: LED backlight / RGB sysfs nodes
+allow hal_light_default sysfs:file { open read write };
+
+# --- health HAL: battery/charger sysfs
+allow hal_health_default sysfs:file { getattr open read };
+
+# --- charger daemon
+allow hvdcp sysfs:dir { open read };
+allow hvdcp sysfs:file { getattr open read write };
+
+# --- thermal engine sysfs polling
+allow thermal-engine sysfs:file { open read write };
+
+# --- init glue: sysfs, binder (device chr_file / script execution are
+# neverallow-protected in AOSP policy; see notes below)
+allow init sysfs_boot_adsp:file open;
+allow init sysfs_slpi:file open;
+allow init sysfs_wlan_fwpath:file setattr;
+allow init sysfs_devices_system_cpu:file write;
+allow init adsprpcd_file:filesystem getattr;
+allow init bt_firmware_file:filesystem getattr;
+allow init firmware_file:filesystem getattr;
+allow init servicemanager:binder { call transfer };
+allow init system_server:binder { call transfer };
+allow init self:netlink_socket create;
+
+# --- sensors HAL: /dev/sensors device node
+allow hal_sensors_default sensors_device:chr_file getattr;
+
+# --- perf HAL glue
+allow hal_perf_default property_socket:sock_file write;
+allow hal_perf_default vendor_default_prop:property_service set;
+allow hal_perf_default init:unix_stream_socket connectto;
+
+# --- fsck on f2fs cache: cache partition node relabeled to
+# cache_block_device via sepolicy/file_contexts (generic block_device access
+# is neverallow-protected in AOSP policy)
+allow fsck cache_file:dir getattr;
+
+# --- installd quota on adsprpcd mount
+allow installd adsprpcd_file:filesystem quotaget;
+
+# --- drm server
+allow drmserver system_data_file:file read;
+
+# --- adsprpcd library dir
+allow adsprpcd vendor_file:dir read;
+
+# --- radio/ims props
+allow radio vendor_qcom_ims_prop:file { getattr open read };
+
+# --- userspace reboot props (bootanim / system_server)
+allow bootanim userspace_reboot_exported_prop:file { getattr open };
+allow system_server userspace_reboot_config_prop:file { getattr open read };
+allow system_server userspace_reboot_exported_prop:file { getattr open };
+
+# --- camera prop reads
+allow zygote exported_camera_prop:file { getattr open };
+
+# --- adb shell prop reads
+allow shell adbd_prop:file { getattr open };
+allow shell apexd_prop:file { getattr open };
+
+# =====================================================================
+# 2026-11-21 additions: denials observed while the whole stack was
+# exercised under permissive (camera / BT / sensors / settings).
+# =====================================================================
+
+# --- stock camera daemon: cam_socket in /data/misc/camera (labelled
+# camera_socket by msm8996-common/file_contexts), plus the parent dir.
+allow mm-qcamerad camera_data_file:dir { write add_name remove_name search };
+allow mm-qcamerad camera_socket:sock_file { create unlink };
+
+# --- Bluetooth HAL: firmware power node (generic sysfs "extldo") and the
+# random BT address file under /data/misc/bluedroid.
+allow hal_bluetooth_qti sysfs:file { write };
+allow hal_bluetooth_qti bluetooth_data_file:file { open read };
+
+# --- toolbox reading bt rfkill state / leds / graphics sysfs (dumpsys-style
+# diagnostics; harmless, allow so enforcing does not spew).
+allow toolbox sysfs_bluetooth_writable:file getattr;
+allow toolbox sysfs_graphics:dir search;
+allow toolbox sysfs_graphics:file { open read };
+allow toolbox sysfs_leds:dir search;
+
+# --- Settings app memory stats (zram0 / vmallocinfo): diagnostic reads.
+allow system_app sysfs_zram:dir search;
+allow system_app sysfs_zram:file { getattr open read };
+allow system_app proc_vmallocinfo:file { getattr open read };
+
+# --- zygote camera prop read during app fork.
+allow zygote exported_camera_prop:file { getattr open read };
+
+# --- userspace reboot props (bootanim + system_server) full set.
+allow bootanim userspace_reboot_exported_prop:file { getattr open };
+allow system_server userspace_reboot_exported_prop:file { getattr open read };
+
+# --- sensors HAL diag node ioctl (kmsg_debug_device) and its /proc probes.
+allow sensors kmsg_debug_device:chr_file ioctl;
+
+# --- fsck block_device access to cache is handled via file_contexts
+# (cache_block_device); mnt_vendor_file getattr is neverallow-blocked and
+# benign, so intentionally omitted.
+
+# --- init executing shell helpers: the legacy Atmel touch service
+# (init.atmel_ts.sh, absent on this FTS-panel SKU) and the radio bring-up
+# script run via `exec - root root -- /vendor/bin/sh ...`.  AOSP forbids
+# init:<file> execute_no_trans with a neverallow, so these cannot be granted;
+# the helpers that matter do not depend on it.  Keep the log clean.
+dontaudit init shell_exec:file execute_no_trans;
+dontaudit init system_file:file execute_no_trans;
+dontaudit init vendor_file:file execute_no_trans;
+
+# --- piped output from toolbox helpers spawned by init (getprop etc.).
+allow toolbox init:fifo_file { getattr write };
+
+# =====================================================================
+# 2026-11-21 enforcing boot (post boot.img flash) additions.  These were
+# still denied because m bootimage does not regenerate the vendor
+# precompiled_sepolicy; the full build installs them into system.img.
+# =====================================================================
+
+# --- Bluetooth HAL: parent /data/misc/bluedroid dir lookup.
+allow hal_bluetooth_qti bluetooth_data_file:dir { getattr search };
+
+# --- boot animation / system_server read the userspace reboot prop file.
+allow bootanim userspace_reboot_exported_prop:file { getattr open read };
+allow system_server userspace_reboot_exported_prop:file { getattr open read };
+
+# --- camera property reads from zygote / system_server / camera app.
+allow zygote exported_camera_prop:file { getattr open read };
+allow system_server exported_camera_prop:file { getattr open read };
+allow platform_app exported_camera_prop:file { getattr open read };
+
+# --- Qualcomm init shell walks vendor radio data.
+allow qti_init_shell vendor_radio_data_file:dir search;
+
+# --- /mnt/vendor traversal by fsck and the poweroff alarm app is benign
+# bring-up noise; coredomain allow rules are neverallow-blocked, so audit off.
+dontaudit fsck mnt_vendor_file:dir search;
+dontaudit poweroffalarm_app mnt_vendor_file:dir search;
+
+# --- enforcing boot 2026-11-21 final tail: e2fsck probing /dev/block/sde12
+# (the DSP partition) is benign; vendor_wigig_core_prop is a platform-private
+# type not visible to vendor policy, so audit off the whole property_type file
+# read for cnss-daemon instead of naming an undefined type.
+dontaudit fsck block_device:blk_file { read write };
+dontaudit wcnss_service property_type:file { getattr open read };
