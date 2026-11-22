@@ -1,1 +1,13 @@
 get_prop(sensors, system_panel_prop)
+
+# The legacy daemon logs its diagnostics to /dev/kmsg_debug (userdebug only);
+# without write access it silently dies with status 6 later on, hiding the
+# real failure from logcat.
+allow sensors kmsg_debug_device:chr_file { w_file_perms getattr };
+
+# NOTE: the sensors.qcom daemon hits dac_override/dac_read_search denials
+# early in its init (exits with status 6 within 40ms). self:capability
+# dac_* is neverallow-blocked by AOSP domain.te (dac_override_allowed is a
+# private macro, not an attribute), so the underlying file permission
+# problem is fixed via init rc instead: the daemon now gets the /dev/diag
+# group (2901) and sns.reg is chmod'ed 0660 root:root by init.g0245d.rc.

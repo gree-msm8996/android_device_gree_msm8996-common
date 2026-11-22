@@ -1,3 +1,19 @@
 allow init adsprpcd_file:filesystem { mount relabelfrom relabelto };
 allow init debugfs:file write;
 allow init socket_device:sock_file { unlink setattr create };
+
+# init.qcom.rc / init.g0245d.rc chown/chmod many sysfs nodes (BT rfkill power
+# switch, leds, graphics idle timer...). AOSP whitelists only a few types for
+# setattr, so every other chown silently failed: the QTI BT HAL could never
+# power the chip through rfkill0/state (root-owned 0644) and firmware download
+# stuck. setattr only - neverallow init sysfs:file { open read write } still
+# applies to the generic sysfs type.
+allow init sysfs_type:file setattr;
+
+# CPU governor switch in init.g0245d.rc (write is open+write, not setattr).
+allow init sysfs_devices_system_cpu:file { open write };
+
+# btaddr_random repair in init.g0245d.rc: data migrated from earlier test
+# ROMs can keep a stale owner on /data/misc/bluedroid.
+allow init bluetooth_data_file:dir setattr;
+
