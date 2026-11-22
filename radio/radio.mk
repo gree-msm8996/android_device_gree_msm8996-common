@@ -32,18 +32,32 @@ PRODUCT_COPY_FILES += \
 # activates the config matching the SIM (see init.qcom.sh for the install).
 # Without sw_mbn_update=1 the feature logs "Feature disabled" and the modem
 # keeps its stale EFS config, leaving IMS permanently off.
+# The remaining props below are the set verified on the device for IMS/VoLTE:
+# calls.on.ims/jbims route calls over IMS; VT_ENABLE/VT_HYBRID_ENABLE enable
+# video telephony; cs_srv_type/vdp_on_ims_cap/ims_retry_3gpp/dan_support are
+# the leeco G0215D IMS behaviour toggles that vendor_prop.mk never carried.
+# persist.vendor.radio.mbn_path is deliberately NOT set: the mbn_sw loader
+# ignores it and scans the hardcoded /data/vendor/radio/modem_config path.
+# persist.vendor.radio.sw_mbn_loaded is RIL-managed state, not a config.
 PRODUCT_PROPERTY_OVERRIDES += \
     persist.vendor.radio.sw_mbn_update=1 \
-    persist.vendor.radio.sw_mbn_volte=1
+    persist.vendor.radio.sw_mbn_volte=1 \
+    persist.vendor.radio.calls.on.ims=1 \
+    persist.radio.VT_ENABLE=1 \
+    persist.radio.VT_HYBRID_ENABLE=1 \
+    persist.vendor.radio.cs_srv_type=1 \
+    persist.vendor.radio.vdp_on_ims_cap=1 \
+    persist.vendor.radio.ims_retry_3gpp=1 \
+    persist.radio.volte.dan_support=true
 
 # Stock build.prop values that the Android 6 QCRIL and the data stack read by
 # their non-vendor names ("persist.radio.*", not "persist.vendor.radio.*").
 # Values already present in vendor_prop.mk are not repeated here.
 PRODUCT_PROPERTY_OVERRIDES += \
-    persist.radio.calls.on.ims=0 \
+    persist.radio.calls.on.ims=1 \
     persist.radio.csvt.enabled=false \
     persist.radio.custom_ecc=1 \
-    persist.radio.jbims=0 \
+    persist.radio.jbims=1 \
     persist.radio.mt_sms_ack=20 \
     persist.radio.rat_on=combine \
     persist.radio.relay_oprt_change=1 \
