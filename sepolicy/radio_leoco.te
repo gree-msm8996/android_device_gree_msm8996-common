@@ -1,0 +1,14 @@
+# The RIL/IMS/QMI/CNE blobs come from the leeco msm8996-common (G0215D)
+# set. Its daemons need a few rules the qcom legacy policy does not grant.
+# These are the exact deltas from leeco's sepolicy/vendor/{ims,cnd,netmgrd}.te.
+
+# imsqmidaemon / imsdatadaemon toggle IMS debug properties at runtime.
+set_prop(ims, debug_prop)
+
+# cnd: chown/fsetid/net_raw plus wifi + debug properties (leeco cnd.te).
+allow cnd self:capability { chown fsetid net_raw };
+set_prop(cnd, debug_prop)
+get_prop(cnd, wifi_prop)
+
+# netmgrd (already permissive in radio_a6.te): xlat and debug properties.
+set_prop(netmgrd, debug_prop)

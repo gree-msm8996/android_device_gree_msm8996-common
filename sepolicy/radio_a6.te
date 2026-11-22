@@ -1,0 +1,19 @@
+# Stock Android 6 telephony stack (device/gree/g0245d/radio).
+#
+# The Android 6 QCRIL is a different generation of the same interface: it
+# keeps its settings in /data/misc/radio (not /data/vendor/radio) and it talks
+# to qmuxd over /dev/socket/qmux_radio instead of opening the QMUX char device
+# itself. qmuxd already has a complete domain in device/qcom/sepolicy_vndr
+# (legacy vendor policy), so only the daemons' own rules are added here.
+#
+# rild (QCRIL 2.x), netmgrd (Android 6 build, programs the IPA/rmnet path) and
+# qmuxd start permissive until the denial list of a full boot has been
+# collected; the same process was used for the rest of g0245d_enforce.te.
+
+permissive qmuxd;
+permissive rild;
+permissive netmgrd;
+
+# QCRIL keeps the ICCID cache, qcril.db and its logs in /data/misc/radio.
+allow rild radio_data_file:dir create_dir_perms;
+allow rild radio_data_file:file create_file_perms;
