@@ -4,7 +4,7 @@
     "target_path": "hardware/xiaomi"
   },
   {
-    "repository": "android_kernel_xiaomi_msm8996",
-    "target_path": "kernel/xiaomi/msm8996"
+    "repository": "android_kernel_gree_msm8996",
+    "target_path": "kernel/gree/msm8996"
   }
 ]
