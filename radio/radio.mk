@@ -24,7 +24,17 @@ PRODUCT_PACKAGES += \
 
 PRODUCT_COPY_FILES += \
     $(RADIO_PATH)/init.gree.radio.sh:$(TARGET_COPY_OUT_VENDOR)/bin/init.gree.radio.sh \
-    $(RADIO_PATH)/vendor.gree.radio.rc:$(TARGET_COPY_OUT_VENDOR)/etc/init/vendor.gree.radio.rc
+    $(RADIO_PATH)/vendor.gree.radio.rc:$(TARGET_COPY_OUT_VENDOR)/etc/init/vendor.gree.radio.rc \
+    $(RADIO_PATH)/mcfg/ct_openmkt_volte.mbn:$(TARGET_COPY_OUT_VENDOR)/etc/mcfg/ct_openmkt_volte.mbn
+
+# CT VoLTE: enable the RIL mbn_sw feature so qcril scans
+# /data/vendor/radio/modem_config, builds the mbn index in qcril.db and
+# activates the config matching the SIM (see init.qcom.sh for the install).
+# Without sw_mbn_update=1 the feature logs "Feature disabled" and the modem
+# keeps its stale EFS config, leaving IMS permanently off.
+PRODUCT_PROPERTY_OVERRIDES += \
+    persist.vendor.radio.sw_mbn_update=1 \
+    persist.vendor.radio.sw_mbn_volte=1
 
 # Stock build.prop values that the Android 6 QCRIL and the data stack read by
 # their non-vendor names ("persist.radio.*", not "persist.vendor.radio.*").

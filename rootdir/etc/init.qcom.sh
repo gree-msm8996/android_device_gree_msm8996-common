@@ -54,6 +54,33 @@ fi
 chmod g-w /data/vendor/modem_config
 setprop ro.vendor.ril.mbn_copy_completed 1
 
+#
+# CT VoLTE: the stock G0245D modem ships no VoLTE-capable mcfg for China
+# Telecom (46011). RIL's mbn_sw feature (libril-qc-qmi-1) scans the hardcoded
+# directory /data/vendor/radio/modem_config/mcfg_sw, indexes every mcfg into
+# qcril.db and activates the one matching (MCC,MNC,VOLTE,OPENMKT,COMMERC).
+# We therefore point that directory at the copy made above and install a
+# patched CT "openmkt" mcfg whose trailer metadata says VOLTE + PLMN 460-11
+# (content NVs are the CU_VoLTE set: IMS_enable=1, ims_operation_mode=2).
+# The mbn ELF hash segment (ph1) carries the SHA256 of the config segment, so
+# the shipped file is pre-patched and re-hashed; editing it by hand without
+# recomputing that hash makes the modem reject the PDC upload.
+#
+if [ ! -e /data/vendor/radio/modem_config ]; then
+    ln -s /data/vendor/modem_config /data/vendor/radio/modem_config
+fi
+volte_mcfg=/vendor/etc/mcfg/ct_openmkt_volte.mbn
+volte_dst=/data/vendor/modem_config/mcfg_sw/generic/china/ct/commerci/openmkt/mcfg_sw.mbn
+if [ -f "$volte_mcfg" ] && [ -f "$volte_dst" ] && ! cmp -s "$volte_mcfg" "$volte_dst"; then
+    cat "$volte_mcfg" > "$volte_dst"
+    chown radio.root "$volte_dst"
+    chmod 0440 "$volte_dst"
+    # qcril.db caches the mbn metadata of the previous scan; force a rescan
+    # so the patched config is indexed before the mbn_sw flow runs.
+    rm -f /data/vendor/radio/qcril.db /data/vendor/radio/qcril_backup.db
+    setprop persist.vendor.radio.sw_mbn_loaded 0
+fi
+
 # Check build variant for printk logging
 # Current default minimum boot-time-default
 buildvariant=`getprop ro.build.type`
